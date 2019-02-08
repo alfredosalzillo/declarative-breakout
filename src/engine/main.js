@@ -1,7 +1,7 @@
 import { arrayEquals, identity } from './utils';
 
-let actions = [];
-let rerenders = new Map();
+const actions = [];
+const rerenders = new Map();
 let currentEnvironment = null;
 
 const createEnvironment = (componentType, parent) => ({
@@ -34,12 +34,12 @@ const resetEnviromentIndexes = context => Object.assign(context, {
   childIndex: 0,
 });
 
-const executeInEnvironment = (context, callback) => {
-  resetEnviromentIndexes(context);
-  const current = currentEnvironment;
-  currentEnvironment = context;
-  const result = callback(context);
-  currentEnvironment = current;
+const executeInEnvironment = (enviroment, callback) => {
+  resetEnviromentIndexes(enviroment);
+  const previous = currentEnvironment;
+  currentEnvironment = enviroment;
+  const result = callback(enviroment);
+  currentEnvironment = previous;
   return result;
 };
 
@@ -54,14 +54,13 @@ const requestAction = (environment, action, Component = () => null) => {
   requestRerender(environment, Component);
 };
 
-const performActions = () => {
-  actions.forEach(([, updateState]) => updateState());
-  actions = [];
-};
+const performActions = () => actions
+  .splice(0)
+  .forEach(([, updateState]) => updateState());
 
 const performRerenders = () => {
   rerenders.forEach(rerender => rerender());
-  rerenders = [];
+  rerenders.clear();
 };
 
 export const start = () => window
@@ -128,7 +127,7 @@ export const useMemo = (fn, store = []) => use(
       store,
     };
   },
-  identity,
+  ({ value }) => value,
 );
 
 export const useCallback = (callback, store) => useMemo(() => callback, store);
