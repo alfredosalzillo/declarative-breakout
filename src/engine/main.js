@@ -1,5 +1,33 @@
-let stack = [];
+import { arrayEquals, identity } from './utils';
+
+let actions = [];
+let rerenders = new Map();
 let currentEnvironment = null;
+
+const createEnvironment = (componentType, parent) => ({
+  hookIndex: 0,
+  hooks: [],
+  children: [],
+  childIndex: 0,
+  rendering: false,
+  props: null,
+  component: null,
+  contexts: new Map(),
+  componentType,
+  parent,
+});
+
+const derivedChildEnvironment = (componentType) => {
+  const environment = currentEnvironment;
+  if (!environment) {
+    return createEnvironment(componentType);
+  }
+  const { childIndex } = environment;
+  const child = environment.children[childIndex] || createEnvironment(componentType, environment);
+  environment.children[childIndex] = child;
+  environment.childIndex = childIndex + 1;
+  return child;
+};
 
 const resetEnviromentIndexes = context => Object.assign(context, {
   hookIndex: 0,
@@ -15,57 +43,33 @@ const executeInEnvironment = (context, callback) => {
   return result;
 };
 
-const setState = (environment, callback, Component = () => null) => {
+const requestRerender = (environment, Component) => {
   const { props } = environment;
-  const updateState = () => executeInEnvironment(environment, callback);
   const rerender = () => executeInEnvironment(environment, () => Component(props, environment));
-  stack.push([environment, updateState, rerender]);
+  rerenders.set(environment, rerender);
 };
 
-const distinctRerenderByEnviroment = (acc = [], [currEnvironment,, rerender]) => [...acc
-  .filter(([environment]) => environment !== currEnvironment), [currEnvironment, rerender]];
-
-export const start = () => window.requestAnimationFrame((time) => {
-  stack.forEach(([, updateState]) => updateState());
-  stack.reduce(distinctRerenderByEnviroment, [])
-    .map(([, rerender]) => rerender)
-    .forEach(rerender => rerender(time));
-  stack = [];
-  start();
-});
-
-const propsEquals = (props1, props2) => {
-  if (props1 === props2) {
-    return true;
-  }
-  if (!props1 || !props2) {
-    return false;
-  }
-  return Object.entries(props1)
-    .every(([name, value]) => value === props2[name]);
+const requestAction = (environment, action, Component = () => null) => {
+  actions.push([environment, () => executeInEnvironment(environment, action)]);
+  requestRerender(environment, Component);
 };
 
-const createEnvironment = componentType => ({
-  hookIndex: 0,
-  hooks: [],
-  children: [],
-  childIndex: 0,
-  rendering: false,
-  props: null,
-  component: null,
-  componentType,
-});
-const derivedChildEnvironment = (componentType) => {
-  const environment = currentEnvironment;
-  if (!environment) {
-    return createEnvironment(componentType);
-  }
-  const { childIndex } = environment;
-  const child = environment.children[childIndex] || createEnvironment(componentType);
-  environment.children[childIndex] = child;
-  environment.childIndex = childIndex + 1;
-  return child;
+const performActions = () => {
+  actions.forEach(([, updateState]) => updateState());
+  actions = [];
 };
+
+const performRerenders = () => {
+  rerenders.forEach(rerender => rerender());
+  rerenders = [];
+};
+
+export const start = () => window
+  .requestAnimationFrame(() => {
+    performActions();
+    performRerenders();
+    start();
+  });
 const disposeHooks = ({
   hooks,
 }) => {
@@ -114,19 +118,9 @@ const use = (hookFn, map) => {
   return map(hook);
 };
 
-const storeEquals = (store1, store2) => {
-  if (store1 === store2) {
-    return true;
-  }
-  if (!store1 || !store2) {
-    return false;
-  }
-  return store1.every((value, i) => value === store2[i]);
-};
-
 export const useMemo = (fn, store = []) => use(
   (hook = {}) => {
-    if (storeEquals(store, hook.store)) {
+    if (arrayEquals(store, hook.store)) {
       return hook;
     }
     return {
@@ -134,14 +128,14 @@ export const useMemo = (fn, store = []) => use(
       store,
     };
   },
-  ({ value }) => value,
+  identity,
 );
 
 export const useCallback = (callback, store) => useMemo(() => callback, store);
 
 export const useEffect = (effect, store) => use(
   (hook = {}) => {
-    if (storeEquals(store, hook.store)) {
+    if (arrayEquals(store, hook.store)) {
       return hook;
     }
     if (typeof hook.dispose === 'function') {
@@ -160,7 +154,7 @@ export const useState = (init) => {
     const environment = currentEnvironment;
     let value = init;
     const get = () => value;
-    const set = newValue => setState(environment, () => {
+    const set = newValue => requestAction(environment, () => {
       value = newValue;
     }, Component(environment.componentType));
     return [get, set];
@@ -169,7 +163,7 @@ export const useState = (init) => {
 };
 
 export const render = (target, Root) => {
-  setState(createEnvironment(), () => {
+  requestAction(createEnvironment(), () => {
     const root = Root();
     if (!root.view) {
       throw new Error('Root component should return an Application.');
