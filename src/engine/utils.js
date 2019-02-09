@@ -9,3 +9,6 @@ export const arrayEquals = (array1, array2) => {
 };
 
 export const identity = element => element;
+
+export const isObject = value => typeof value === 'object';
+export const hasEnumerableProperties = object => object && Object.entries(object).length === 0;

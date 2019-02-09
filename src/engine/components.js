@@ -1,5 +1,6 @@
 import PIXI from 'pixi.js';
 import { Component } from './main';
+import { hasEnumerableProperties, isObject } from './utils';
 
 export const Application = Component(({
   autoStart,
@@ -47,8 +48,6 @@ export const Application = Component(({
   return application;
 });
 
-const isObject = value => typeof value === 'object';
-const hasEnumerableProperties = object => object && Object.entries(object).length === 0;
 const deepAssign = (target, ...sources) => sources
   .map(Object.entries)
   .flat()

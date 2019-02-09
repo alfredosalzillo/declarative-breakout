@@ -17,7 +17,6 @@ const babelConf = {
   ],
   plugins: [
     ['@babel/plugin-proposal-export-default-from'],
-    ['@babel/plugin-external-helpers'],
     ['@babel/plugin-proposal-decorators', {
       legacy: true,
     }],
@@ -29,7 +28,7 @@ const babelConf = {
 export default {
   input: './src/main.js',
   output: {
-    format: 'umd',
+    format: 'esm',
     dir: 'dist',
     sourcemap: 'eval',
   },
