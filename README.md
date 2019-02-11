@@ -1,2 +1,2 @@
 # declarative-brick-block
-Declarative classic Brick Block implementation
+Declarative classic Breakout implementation
