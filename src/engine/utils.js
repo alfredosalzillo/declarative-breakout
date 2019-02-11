@@ -12,3 +12,5 @@ export const identity = element => element;
 
 export const isObject = value => typeof value === 'object';
 export const hasEnumerableProperties = object => object && Object.entries(object).length === 0;
+
+export const fnOrValue = (value, ...args) => (typeof value === 'function' ? value(...args) : value);

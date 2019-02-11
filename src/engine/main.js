@@ -1,5 +1,6 @@
-import { arrayEquals, identity } from './utils';
+import { arrayEquals, fnOrValue, identity } from './utils';
 
+const performingAction = false;
 const actions = [];
 const rerenders = new Map();
 let currentEnvironment = null;
@@ -29,16 +30,16 @@ const derivedChildEnvironment = (componentType) => {
   return child;
 };
 
-const resetEnviromentIndexes = context => Object.assign(context, {
+const resetEnvironmentIndexes = environment => Object.assign(environment, {
   hookIndex: 0,
   childIndex: 0,
 });
 
-const executeInEnvironment = (enviroment, callback) => {
-  resetEnviromentIndexes(enviroment);
+const executeInEnvironment = (environment, callback) => {
+  resetEnvironmentIndexes(environment);
   const previous = currentEnvironment;
-  currentEnvironment = enviroment;
-  const result = callback(enviroment);
+  currentEnvironment = environment;
+  const result = callback(environment);
   currentEnvironment = previous;
   return result;
 };
@@ -49,25 +50,24 @@ const requestRerender = (environment, Component) => {
   rerenders.set(environment, rerender);
 };
 
-const requestAction = (environment, action, Component = () => null) => {
-  actions.push([environment, () => executeInEnvironment(environment, action)]);
-  requestRerender(environment, Component);
-};
+const requestAction = (environment, action) => actions
+  .push([environment, delta => executeInEnvironment(environment, () => action(delta))]);
 
-const performActions = () => actions
+const performActions = delta => actions
   .splice(0)
-  .forEach(([, updateState]) => updateState());
+  .forEach(([, action]) => action(delta));
 
 const performRerenders = () => {
   rerenders.forEach(rerender => rerender());
   rerenders.clear();
 };
 
-export const start = () => window
-  .requestAnimationFrame(() => {
-    performActions();
-    performRerenders();
-    start();
+export const start = (previous = 0) => window
+  .requestAnimationFrame((timestamp) => {
+    const delta = previous && timestamp - previous;
+    performActions(delta);
+    performRerenders(delta);
+    start(timestamp);
   });
 const disposeHooks = ({
   hooks,
@@ -77,32 +77,71 @@ const disposeHooks = ({
     length: 0,
   });
 };
-export const Component = componentFn => (props, inEnvironment) => {
-  const environment = inEnvironment
-    ? currentEnvironment
-    : derivedChildEnvironment(componentFn);
-  return executeInEnvironment(environment, () => {
-    const {
-      componentType,
-      rendering,
-    } = environment;
-    if (rendering) {
-      throw new Error('Cannot rerender during a render');
-    }
-    if (componentFn !== componentType) {
-      disposeHooks(environment);
-    }
-    environment.rendering = true;
-    environment.props = props;
-    environment.componentType = componentFn;
-    const component = componentFn(props, environment.component);
-    environment.component = component;
-    environment.rendering = false;
-    return component;
-  });
+const SymbolComponent = Symbol('component');
+const executeComponent = (component) => {
+  if (component && component[SymbolComponent]) {
+    return component();
+  }
+  return component;
+};
+export const Component = componentFn => (props = {}, inEnvironment) => {
+  const comp = () => {
+    const environment = inEnvironment
+      ? currentEnvironment
+      : derivedChildEnvironment(componentFn);
+    return executeInEnvironment(environment, () => {
+      const {
+        componentType,
+        rendering,
+      } = environment;
+      if (rendering) {
+        throw new Error('Cannot rerender during a render');
+      }
+      if (componentFn !== componentType) {
+        disposeHooks(environment);
+      }
+      environment.rendering = true;
+      environment.props = props;
+      environment.componentType = componentFn;
+      const component = componentFn({
+        ...props,
+        children: [props.children].flat()
+          .map(executeComponent)
+          .filter(identity),
+      }, environment.component);
+      environment.component = component;
+      environment.rendering = false;
+      return executeComponent(component);
+    });
+  };
+  comp[SymbolComponent] = true;
+  return comp;
 };
 
-const use = (hookFn, map) => {
+export const createContext = (defaultValue) => {
+  const Context = {
+    Provider: Component(({
+      value = defaultValue,
+      children,
+    } = {}) => {
+      currentEnvironment.contexts.set(Context, value);
+      return children;
+    }),
+  };
+  return Context;
+};
+
+const contextOf = (environment, Type) => {
+  if (!environment || !environment.contexts) {
+    return undefined;
+  }
+  if (environment.contexts.has(Type)) {
+    return environment.contexts.get(Type);
+  }
+  return contextOf(environment.parent, Type);
+};
+
+const use = (hookFn, map = identity) => {
   const {
     rendering,
     hooks = [],
@@ -111,11 +150,15 @@ const use = (hookFn, map) => {
   if (!rendering) {
     throw new Error('Cannot use hooks outside a rendering');
   }
-  const hook = hookFn(hooks[hookIndex]);
+  const hook = hookFn(hooks[hookIndex], Object.freeze({
+    ...currentEnvironment,
+  }));
   hooks[hookIndex] = hook;
   currentEnvironment.hookIndex = hookIndex + 1;
   return map(hook);
 };
+
+export const useContext = Type => use((_, environment) => contextOf(environment, Type));
 
 export const useMemo = (fn, store = []) => use(
   (hook = {}) => {
@@ -132,7 +175,7 @@ export const useMemo = (fn, store = []) => use(
 
 export const useCallback = (callback, store) => useMemo(() => callback, store);
 
-export const useEffect = (effect, store) => use(
+export const useEffect = (effect, store = []) => use(
   (hook = {}) => {
     if (arrayEquals(store, hook.store)) {
       return hook;
@@ -148,22 +191,42 @@ export const useEffect = (effect, store) => use(
   () => undefined,
 );
 
-export const useState = (init) => {
+export const useState = (init, store = []) => {
   const [getValue, setValue] = useMemo(() => {
     const environment = currentEnvironment;
     let value = init;
     const get = () => value;
-    const set = newValue => requestAction(environment, () => {
-      value = newValue;
-    }, Component(environment.componentType));
+    const set = (update) => {
+      requestAction(environment, () => {
+        value = fnOrValue(update, value);
+        requestRerender(environment, (...args) => executeComponent(
+          Component(environment.componentType)(...args),
+        ));
+      });
+    };
     return [get, set];
-  }, [init]);
+  }, store);
   return [getValue(), setValue];
+};
+
+export const useDelta = (fn, store) => {
+  const environment = currentEnvironment;
+  useMemo(() => {
+    const action = (delta) => {
+      fn(delta);
+      requestAction(environment, action);
+    };
+    requestAction(environment, action);
+  }, store);
+};
+
+export const useDeltaOne = (fn) => {
+  requestAction(currentEnvironment, fn);
 };
 
 export const render = (target, Root) => {
   requestAction(createEnvironment(), () => {
-    const root = Root();
+    const [root] = executeComponent(Root());
     if (!root.view) {
       throw new Error('Root component should return an Application.');
     }

@@ -5,6 +5,7 @@ import copy from 'rollup-plugin-copy';
 import serve from 'rollup-plugin-serve';
 import builtins from 'rollup-plugin-node-builtins';
 import globals from 'rollup-plugin-node-globals';
+import image from 'rollup-plugin-img';
 
 const babelConf = {
   exclude: [
@@ -33,6 +34,10 @@ export default {
     sourcemap: 'eval',
   },
   plugins: [
+    image({
+      output: 'dist/images',
+      limit: Infinity,
+    }),
     globals(),
     builtins(),
     babel(babelConf),

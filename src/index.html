@@ -1,8 +1,23 @@
 <html lang="en">
 <head>
-    <title>Declarative Brick Block Sample0</title>
+    <title>Declarative Brick Block Sample</title>
+    <style>
+        body {
+            background: #79a2e5;
+        }
+        #app {
+
+        }
+        #app canvas {
+            display: block;
+            margin: calc((100vh - 500px)/2) auto auto;
+            border: 1px solid black;
+            background: white;
+        }
+    </style>
 </head>
 <body>
-<script type="module" src="./main.js"></script>
+    <div id="app"></div>
+    <script type="module" src="./main.js"></script>
 </body>
 </html>
