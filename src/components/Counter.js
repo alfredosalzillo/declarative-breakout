@@ -1,11 +1,11 @@
-import { Component, useEffect, useState } from '../engine/main';
+import { Component, useDeltaOne, useState } from '../engine/main';
 import { Text } from '../engine/components';
 
-export default Component(({ text, interval = 1000, ...props }) => {
-  const [count, setCount] = useState(0);
-  useEffect(() => setTimeout(() => setCount(count + 1), interval), [count]);
+export default Component(({ text, active = false, ...props }) => {
+  const [time, setTime] = useState(0);
+  useDeltaOne(delta => active && setTime(old => old + delta / 1000));
   return Text({
     ...props,
-    text: text(count),
+    text: text(time),
   });
 });

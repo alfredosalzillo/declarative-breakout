@@ -3,5 +3,5 @@ import Counter from './Counter';
 
 export default Component(props => Counter({
   ...props,
-  text: useCallback(count => `${count}s`),
+  text: useCallback(time => `${Math.round(time)}s`),
 }));

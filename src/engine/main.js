@@ -1,8 +1,10 @@
 import { arrayEquals, fnOrValue, identity } from './utils';
 
-const performingAction = false;
+let performingAction = false;
+let delta = 0;
 const actions = [];
 const rerenders = new Map();
+let renderer;
 let currentEnvironment = null;
 
 const createEnvironment = (componentType, parent) => ({
@@ -50,23 +52,42 @@ const requestRerender = (environment, Component) => {
   rerenders.set(environment, rerender);
 };
 
-const requestAction = (environment, action) => actions
-  .push([environment, delta => executeInEnvironment(environment, () => action(delta))]);
+const requestAction = (environment, action) => {
+  if (performingAction) return action(delta);
+  return actions
+    .push([environment, () => executeInEnvironment(environment, () => action(delta))]);
+};
 
-const performActions = delta => actions
-  .splice(0)
-  .forEach(([, action]) => action(delta));
+const performActions = () => {
+  performingAction = true;
+  actions
+    .splice(0)
+    .forEach(([, action]) => action(delta));
+  performingAction = false;
+};
 
+const removeChildren = (env) => {
+  env.children.forEach((child) => {
+    rerenders.delete(child);
+    removeChildren(child);
+  });
+};
 const performRerenders = () => {
-  rerenders.forEach(rerender => rerender());
+  rerenders.forEach((rerender, env) => {
+    removeChildren(env);
+  });
+  rerenders.forEach((rerender) => {
+    rerender();
+  });
   rerenders.clear();
 };
 
 export const start = (previous = 0) => window
   .requestAnimationFrame((timestamp) => {
-    const delta = previous && timestamp - previous;
+    delta = previous && timestamp - previous;
     performActions(delta);
     performRerenders(delta);
+    if (renderer) renderer.render();
     start(timestamp);
   });
 const disposeHooks = ({
@@ -212,7 +233,7 @@ export const useState = (init, store = []) => {
 export const useDelta = (fn, store) => {
   const environment = currentEnvironment;
   useMemo(() => {
-    const action = (delta) => {
+    const action = () => {
       fn(delta);
       requestAction(environment, action);
     };
@@ -231,7 +252,9 @@ export const render = (target, Root) => {
       throw new Error('Root component should return an Application.');
     }
     target.appendChild(root.view);
-    root.start();
+    renderer = root;
+    // root.start();
+    // root.ticker.stop();
   });
   start();
 };

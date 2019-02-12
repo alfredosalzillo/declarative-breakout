@@ -9,6 +9,7 @@ import Timer from './components/Timer';
 import useKeyboard from './hooks/useKeyboard';
 import useIntersectionEffect from './hooks/useIntersectionEffect';
 import useFps from './hooks/useFps';
+import Game from './components/Game';
 
 const nextDirection = (box1, box2) => {
   const xDistance = box1.x - (box2.x + box2.width / 2);
@@ -24,18 +25,22 @@ const height = 500;
 
 const none = 'none';
 const blue = 'blue';
+const green = 'green';
+const red = 'red';
 
 const bricksConfDef = [
-  [none, blue, blue, blue, blue, blue, blue, blue],
-  [none, blue, blue, blue, blue, blue, blue, none],
-  [none, blue, blue, blue, blue, blue, blue, none],
-  [none, blue, blue, blue, blue, blue, blue, none],
-  [blue, blue, blue, blue, blue, blue, blue, none],
-  [none, none, none, none, blue, blue, blue, none],
+  [blue, blue, blue, blue, blue, green, green, green, blue, blue, blue, blue, blue],
+  [blue, blue, blue, blue, red, green, green, green, red, blue, blue, blue, blue],
+  [blue, red, blue, blue, red, green, green, green, red, blue, blue, blue, blue],
+  [blue, red, blue, red, red, green, green, green, red, red, blue, blue, blue],
+  [blue, red, blue, blue, red, green, green, green, red, blue, blue, blue, blue],
+  [blue, blue, blue, blue, red, green, green, green, red, blue, blue, blue, blue],
+  [blue, blue, blue, blue, blue, green, green, green, blue, blue, blue, blue, blue],
+  [blue, blue, blue, blue, blue, green, green, green, blue, blue, blue, blue, blue],
 ];
-const bricksForLine = 8;
+const bricksForLine = Math.max(...bricksConfDef.map(line => line.length));
 
-const hasBricks = conf => conf.flat().some(color => color !== none);
+const hasBricks = conf => conf.flat().some(color => color !== 'none');
 
 const velocity = 150;
 
@@ -63,31 +68,33 @@ const App = Component(() => {
     if (ballPosition.y > height) {
       setGameStatus('loose');
     }
-    if (ballPosition.y < 10) {
+    if (ballPosition.y < 0) {
       setBallDirection({
         ...ballDirection,
         y: +1,
       });
     }
-    if (ballPosition.x < 10) {
+    if (ballPosition.x < 0) {
       setBallDirection({
         ...ballDirection,
         x: +1,
       });
     }
-    if (ballPosition.x > (width - 10)) {
+    if (ballPosition.x > (width - 5)) {
       setBallDirection({
         ...ballDirection,
         x: -1,
       });
     }
   });
-  useDeltaOne(delta => isPlaying(gameStatus) && setBallPosition(position => ({
-    x: position.x + ballDirection.x * velocity * delta / 1000,
-    y: position.y + ballDirection.y * velocity * delta / 1000,
+  useDeltaOne(delta => isPlaying(gameStatus) && setBallPosition(({ x, y }) => ({
+    x: x + ballDirection.x * velocity * delta / 1000,
+    y: y + ballDirection.y * velocity * delta / 1000,
   })));
+  const canMove = (barPosition.x > 0 && barDirection < 0)
+    || (barPosition.x + 70 < width && barDirection > 0);
   useDeltaOne((delta) => {
-    if (isPlaying(gameStatus) && barDirection) {
+    if (isPlaying(gameStatus) && canMove) {
       setBarPosition(position => ({
         x: position.x + barDirection * velocity * 2.5 * delta / 1000,
         y: position.y,
@@ -112,8 +119,8 @@ const App = Component(() => {
     barBounds,
   );
   const [bricksConf, setBrickConf] = useState(bricksConfDef);
-  const calcBrickX = j => (width - bricksForLine * 40) / 2 + j * 40;
-  const calcBrickY = i => 60 + i * 25;
+  const calcBrickX = j => (width - bricksForLine * 35) / 2 + j * 35;
+  const calcBrickY = i => 60 + i * 20;
   const bricksDesc = bricksConf
     .map((line, i) => line
       .map((color, j) => ({
@@ -131,8 +138,8 @@ const App = Component(() => {
     .map(desc => desc.position);
   const bricksBounds = bricksPositions.map(desc => ({
     ...desc,
-    width: 35,
-    height: 20,
+    width: 30,
+    height: 19,
   }));
   useIntersectionEffect(
     (intersection) => {
@@ -159,7 +166,8 @@ const App = Component(() => {
     position: barPosition,
     color: 'blue',
   });
-  return Container({
+  return Game({
+    status: gameStatus,
     children: [
       Container({
         children: bricks,
@@ -184,6 +192,7 @@ const App = Component(() => {
               x: width - 70,
               y: 10,
             },
+            active: isPlaying(gameStatus),
           }),
           Text({
             position: {
