@@ -28,6 +28,13 @@ const blue = 'blue';
 const green = 'green';
 const red = 'red';
 
+const colors = [
+  blue,
+  green,
+  red,
+];
+const nextColor = color => colors[colors.indexOf(color) - 1] || none;
+
 const bricksConfDef = [
   [blue, blue, blue, blue, blue, green, green, green, blue, blue, blue, blue, blue],
   [blue, blue, blue, blue, red, green, green, green, red, blue, blue, blue, blue],
@@ -146,7 +153,7 @@ const App = Component(() => {
       setBrickConf(
         bricksConf.map((line, i) => line
           .map((color, j) => ((calcBrickY(i) === intersection.y
-              && calcBrickX(j) === intersection.x) ? 'none' : color))),
+              && calcBrickX(j) === intersection.x) ? nextColor(color) : color))),
       );
       setBallDirection(nextDirection(ballBounds, intersection));
       setScore(s => s + 10);
